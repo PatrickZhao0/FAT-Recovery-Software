@@ -239,26 +239,35 @@ void con_recover(char* disk_start, BootEntry* boot_entry, int* FAT, char* filena
             }
             deleted_filename[deleted_filename_index] = '\0';
             if(strcmp(deleted_filename+1, filename+1) == 0){
-                dir_entry->DIR_Name[0] = filename[0];
-                int high = (int)dir_entry->DIR_FstClusHI;
-                int low = (int)dir_entry->DIR_FstClusLO;
-                int combined = (high << 16) | (low & 0xFFFF);
-                int cluster_size_in_byte = (int)(boot_entry->BPB_BytsPerSec * boot_entry->BPB_SecPerClus); 
-                int clusters_span = (int) (dir_entry->DIR_FileSize / cluster_size_in_byte);
-                if(dir_entry->DIR_FileSize % cluster_size_in_byte != 0) 
-                    clusters_span ++;
-                for(int i = 1; i < clusters_span; i++){
-                    FAT[combined] = combined + 1;
-                    combined ++;
+                if (select_file == NULL){
+                    select_file = dir_entry;
+                    continue;
+                }else{
+                    printf("%s: multiple candidates found\n", filename);
+                    return;
                 }
-                FAT[combined] = 0x0ffffff8;
-                printf("%s: successfully recovered\n", filename);
-                return;
             }else{
                 continue;       
             }
         }
     }while((curr_clus = FAT[curr_clus]) < 0x0ffffff8);
-    printf("%s: file not found\n", filename);
-    return;
+    
+    if(select_file != NULL){
+        select_file->DIR_Name[0] = filename[0];
+        int high = (int)select_file->DIR_FstClusHI;
+        int low = (int)select_file->DIR_FstClusLO;
+        int combined = (high << 16) | (low & 0xFFFF);
+        int cluster_size_in_byte = (int)(boot_entry->BPB_BytsPerSec * boot_entry->BPB_SecPerClus); 
+        int clusters_span = (int) (select_file->DIR_FileSize / cluster_size_in_byte);
+        if(select_file->DIR_FileSize % cluster_size_in_byte != 0) 
+            clusters_span ++;
+        for(int i = 1; i < clusters_span; i++){
+            FAT[combined] = combined + 1;
+            combined ++;
+        }
+        FAT[combined] = 0x0ffffff8;
+        printf("%s: successfully recovered\n", filename);
+    }else{
+        printf("%s: file not found\n", filename);
+    }
 } 
