@@ -1,0 +1,8 @@
+.vscode
+.DS_store
+disk
+disk3
+disk4
+fat32.disk
+*.zip
+backup
