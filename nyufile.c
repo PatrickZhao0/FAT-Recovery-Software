@@ -62,7 +62,8 @@ void print_usage(int exit_status);
 void print_fsinfo(BootEntry* boot_entry);
 int cluster_addr(BootEntry* boot_entry, int cluster_num);
 void list_root_dir(char* disk_start, BootEntry* boot_entry, int* FAT);
-void con_recover(char* disk_start, BootEntry* boot_entry, int* FAT, char* filename);
+void recover(char* disk_start, BootEntry* boot_entry, int* FAT, char* filename);
+void contiguous_rec(DirEntry* selected_file, BootEntry* boot_entry, int* FAT, char* filename);
 
 int main(int argc, char** argv){
     char* filename = NULL;
@@ -136,7 +137,7 @@ int main(int argc, char** argv){
     if (Rflag)
         printf("R");
     if (rflag)
-        con_recover(disk_start, boot_entry, FAT, filename);
+        recover(disk_start, boot_entry, FAT, filename);
     return 0;
 }
 
@@ -210,10 +211,10 @@ int cluster_addr(BootEntry* boot_entry, int cluster_num){
     return reserved_size + FATs_size + cluster_offset;
 }
 
-void con_recover(char* disk_start, BootEntry* boot_entry, int* FAT, char* filename){
+void recover(char* disk_start, BootEntry* boot_entry, int* FAT, char* filename){
     int curr_clus = (int) boot_entry->BPB_RootClus;
     char* start_addr;
-    DirEntry* select_file = NULL;
+    DirEntry* selected_file = NULL;
     do{
         int entries_remaining_in_cluster = (int)((boot_entry->BPB_BytsPerSec * boot_entry->BPB_SecPerClus) / sizeof(DirEntry));
         start_addr = disk_start + cluster_addr(boot_entry, curr_clus);
@@ -239,8 +240,8 @@ void con_recover(char* disk_start, BootEntry* boot_entry, int* FAT, char* filena
             }
             deleted_filename[deleted_filename_index] = '\0';
             if(strcmp(deleted_filename+1, filename+1) == 0){
-                if (select_file == NULL){
-                    select_file = dir_entry;
+                if (selected_file == NULL){
+                    selected_file = dir_entry;
                     continue;
                 }else{
                     printf("%s: multiple candidates found\n", filename);
@@ -251,15 +252,19 @@ void con_recover(char* disk_start, BootEntry* boot_entry, int* FAT, char* filena
             }
         }
     }while((curr_clus = FAT[curr_clus]) < 0x0ffffff8);
-    
-    if(select_file != NULL){
-        select_file->DIR_Name[0] = filename[0];
-        int high = (int)select_file->DIR_FstClusHI;
-        int low = (int)select_file->DIR_FstClusLO;
+
+    contiguous_rec(selected_file, boot_entry, FAT, filename);
+}
+
+void contiguous_rec(DirEntry* selected_file, BootEntry* boot_entry, int* FAT, char* filename){
+    if(selected_file != NULL){
+        selected_file->DIR_Name[0] = filename[0];
+        int high = (int)selected_file->DIR_FstClusHI;
+        int low = (int)selected_file->DIR_FstClusLO;
         int combined = (high << 16) | (low & 0xFFFF);
         int cluster_size_in_byte = (int)(boot_entry->BPB_BytsPerSec * boot_entry->BPB_SecPerClus); 
-        int clusters_span = (int) (select_file->DIR_FileSize / cluster_size_in_byte);
-        if(select_file->DIR_FileSize % cluster_size_in_byte != 0) 
+        int clusters_span = (int) (selected_file->DIR_FileSize / cluster_size_in_byte);
+        if(selected_file->DIR_FileSize % cluster_size_in_byte != 0) 
             clusters_span ++;
         for(int i = 1; i < clusters_span; i++){
             FAT[combined] = combined + 1;
@@ -270,4 +275,4 @@ void con_recover(char* disk_start, BootEntry* boot_entry, int* FAT, char* filena
     }else{
         printf("%s: file not found\n", filename);
     }
-} 
+}
